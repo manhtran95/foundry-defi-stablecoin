@@ -26,7 +26,7 @@ contract HelperConfig is Script {
             activeNetworkConfig = getSepoliaEthConfig();
         } else {
             activeNetworkConfig = getOrCreateAnvilEthConfig();
-        }        
+        }
     }
 
     function getSepoliaEthConfig() public view returns (NetworkConfig memory) {

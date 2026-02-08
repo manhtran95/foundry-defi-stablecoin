@@ -47,11 +47,13 @@ contract DSCEngine is ReentrancyGuard {
     error DSCEngine__TransferFailed();
     error DSCEngine__BreaksHealthFactor(uint256 healthFactor);
     error DSCEngine__MintFailed();
+    error DSCEngine__NotEnoughCollateralToRedeem();
 
     /////////////
     // Events
     /////////////
     event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
+    event CollateralRedeemed(address indexed user, address indexed token, uint256 indexed amount);
 
     ////////////////////
     // State variables//
@@ -104,7 +106,24 @@ contract DSCEngine is ReentrancyGuard {
         I_DSC = DecentralizedStableCoin(dscAddress);
     }
 
-    function depositCollateralAndMintDsc() external {}
+    ///////////////////////
+    // External Functions//
+    ///////////////////////
+    /**
+     *
+     * @param tokenCollateralAddress The address of the token to deposit as collateral
+     * @param amountCollateral The amount of collateral to deposit
+     * @param amountDscToMint The amount of DSC to mint
+     * @notice this function will deposit collateral and mint DSC in one transaction
+     */
+    function depositCollateralAndMintDsc(
+        address tokenCollateralAddress,
+        uint256 amountCollateral,
+        uint256 amountDscToMint
+    ) external {
+        depositCollateral(tokenCollateralAddress, amountCollateral);
+        mintDsc(amountDscToMint);
+    }
 
     /**
      * @notice Deposit collateral and mint DSC
@@ -113,7 +132,7 @@ contract DSCEngine is ReentrancyGuard {
      * @param amountCollateral The amount of collateral to deposit
      */
     function depositCollateral(address tokenCollateralAddress, uint256 amountCollateral)
-        external
+        public
         moreThanZero(amountCollateral)
         isAllowedToken(tokenCollateralAddress)
         nonReentrant
@@ -129,14 +148,28 @@ contract DSCEngine is ReentrancyGuard {
 
     function redeemCollateralForDsc() external {}
 
-    function redeemCollateral() external {}
+    function redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral)
+        external
+        moreThanZero(amountCollateral)
+        isAllowedToken(tokenCollateralAddress)
+        nonReentrant
+    {
+        // check
+        // effects
+        sCollateralDeposited[msg.sender][tokenCollateralAddress] -= amountCollateral;
+        emit CollateralRedeemed(msg.sender, tokenCollateralAddress, amountCollateral);
+        // interactions
+        bool success = IERC20(tokenCollateralAddress).transfer(msg.sender, amountCollateral);
+        if (!success) revert DSCEngine__TransferFailed();
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
     /**
      *
      * @param amountDscToMint amount of DSC to mint
      * @notice require: collateral value > min threshold
      */
-    function mintDsc(uint256 amountDscToMint) external moreThanZero(amountDscToMint) nonReentrant {
+    function mintDsc(uint256 amountDscToMint) public moreThanZero(amountDscToMint) nonReentrant {
         // check
 
         // effects
@@ -158,12 +191,17 @@ contract DSCEngine is ReentrancyGuard {
     // Private & internal Functions///
     //////////////////////////////////
 
-    function _getAccountInformation(address user) private view returns (uint256 totalDscMinted, uint256 collateralValueInUsd) {
+    function _getAccountInformation(address user)
+        private
+        view
+        returns (uint256 totalDscMinted, uint256 collateralValueInUsd)
+    {
         totalDscMinted = sDscMinted[user];
         collateralValueInUsd = getAccountCollateralValue(user);
     }
+
     /**
-     * 
+     *
      * Returns how close to liquidation a user is
      */
     function _healthFactor(address user) private view returns (uint256) {
@@ -192,9 +230,8 @@ contract DSCEngine is ReentrancyGuard {
 
     function getUsdValue(address token, uint256 amount) public view returns (uint256) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(sPriceFeeds[token]);
-        (, int256 price, , , ) = priceFeed.latestRoundData();
+        (, int256 price,,,) = priceFeed.latestRoundData();
         // forge-lint: disable-next-line(unsafe-typecast)
         return (uint256(price) * ADDITIONAL_FEED_PRECISION * amount) / PRECISION;
     }
-
 }
