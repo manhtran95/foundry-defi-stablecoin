@@ -28,7 +28,7 @@ contract DSCEngineTest is Test {
     // Events////
     /////////////
     event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
-    event CollateralRedeemed(address indexed from, address indexed to, address indexed token, uint256 amount);    
+    event CollateralRedeemed(address indexed from, address indexed to, address indexed token, uint256 amount);
 
     function setUp() public {
         deployer = new DeployDSC();
@@ -40,6 +40,7 @@ contract DSCEngineTest is Test {
     // Constructor tests
     address[] public tokenAddresses;
     address[] public priceFeedAddresses;
+
     function testRevertsIfTokenLengthDoesNotMatchPriceFeedsLength() public {
         tokenAddresses.push(weth);
         priceFeedAddresses.push(wethUsdPriceFeed);
@@ -111,5 +112,33 @@ contract DSCEngineTest is Test {
         dsce.depositCollateral(weth, AMOUNT_COLLATERAL);
         vm.stopPrank();
     }
+
+    //////////////////////////////
+    // Mint DSC tests/////////////
+    //////////////////////////////
+    function testRevertsIfMintAmountIsZero() public depositedCollateral {
+        vm.startPrank(USER);
+        vm.expectRevert(DSCEngine.DSCEngine__AmountMustBeGreaterThanZero.selector);
+        dsce.mintDsc(0);
+        vm.stopPrank();
+    }
+
+    function testRevertsIfMintBeforeCollateralIsDeposited() public {
+        vm.startPrank(USER);
+        uint256 expectedHealthFactor = 0;
+        vm.expectRevert(abi.encodeWithSelector(DSCEngine.DSCEngine__BreaksHealthFactor.selector, expectedHealthFactor));
+        dsce.mintDsc(1);
+        vm.stopPrank();
+    }
+
+    function testRevertsIfMintBreaksHealthFactor() public depositedCollateral {
+        vm.startPrank(USER);
+        uint256 AMOUNT_COLLATERAL_IN_USD = dsce.getUsdValue(weth, AMOUNT_COLLATERAL);
+        uint256 expectedHealthFactor = 0.5 ether;
+        vm.expectRevert(abi.encodeWithSelector(DSCEngine.DSCEngine__BreaksHealthFactor.selector, expectedHealthFactor));
+        dsce.mintDsc(AMOUNT_COLLATERAL_IN_USD);
+        vm.stopPrank();
+    }
+
 
 }
