@@ -279,5 +279,21 @@ contract DSCEngineTest is Test {
     function testUserHasNoMoreDebt() public liquidated {
         (uint256 userDscMinted,) = dsce.getAccountInformation(USER);
         assertEq(userDscMinted, 0);
-    }    
+    }
+
+    ////////////////////////////
+    // Getter tests/////////////
+    ////////////////////////////
+    function testGetters() public view {
+        assertEq(dsce.getPrecision(), 1e18);
+        assertEq(dsce.getAdditionalFeedPrecision(), 1e10);
+        assertEq(dsce.getLiquidationThreshold(), 50);
+        assertEq(dsce.getLiquidationBonus(), 10);
+        assertEq(dsce.getLiquidationPrecision(), 100);
+        assertEq(dsce.getMinHealthFactor(), 1e18);
+        assertEq(dsce.getCollateralTokens().length, 2);
+        assertEq(dsce.getCollateralTokens()[0], weth);
+        assertEq(dsce.getCollateralTokens()[1], wbtc);
+        assertEq(dsce.getDsc(), address(dsc));
+    }
 }
