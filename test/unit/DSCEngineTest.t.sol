@@ -22,6 +22,7 @@ contract DSCEngineTest is Test {
 
     address public USER = makeAddr("user");
     uint256 public constant AMOUNT_COLLATERAL = 10 ether;
+    uint256 public constant AMOUNT_DSC_TO_MINT = 100 ether;
     uint256 public constant STARTING_ERC20_BALANCE = 15 ether;
 
     /////////////
@@ -140,5 +141,90 @@ contract DSCEngineTest is Test {
         vm.stopPrank();
     }
 
+    ///////////////////////////////////////////
+    // Deposit Collateral And Mint DSC tests///
+    ///////////////////////////////////////////
+    modifier depositedCollateralAndMintedDsc() {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dsce), AMOUNT_COLLATERAL);
+        dsce.depositCollateral(weth, AMOUNT_COLLATERAL);
+        dsce.mintDsc(AMOUNT_DSC_TO_MINT);
+        vm.stopPrank();
+        _;
+    }
 
+    function testCanDepositCollateralAndMintDsc() public {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dsce), AMOUNT_COLLATERAL);
+        uint256 AMOUNT_COLLATERAL_IN_USD = dsce.getUsdValue(weth, AMOUNT_COLLATERAL);
+        uint256 validAmountDsc = AMOUNT_COLLATERAL_IN_USD / 2;
+        dsce.depositCollateralAndMintDsc(weth, AMOUNT_COLLATERAL, validAmountDsc);
+        vm.stopPrank();
+    }
+
+    ////////////////////////////
+    //Redeem Collateral tests///
+    ////////////////////////////
+    function testRevertsIfRedeemAmountIsZero() public {
+        vm.startPrank(USER);
+        vm.expectRevert(DSCEngine.DSCEngine__AmountMustBeGreaterThanZero.selector);
+        dsce.redeemCollateral(weth, 0);
+        vm.stopPrank();
+    }
+
+    function testRedeemCollateralEmitsEvent() public depositedCollateral {
+        vm.startPrank(USER);
+        vm.expectEmit(true, true, true, true);
+        emit CollateralRedeemed(USER, USER, weth, AMOUNT_COLLATERAL);
+        dsce.redeemCollateral(weth, AMOUNT_COLLATERAL);
+        vm.stopPrank();
+    }
+
+    function testCanRedeemCollateral() public depositedCollateral {
+        vm.startPrank(USER);
+        uint256 userBalanceBeforeRedeem = dsce.getCollateralBalanceOfUser(USER, weth);
+        assertEq(userBalanceBeforeRedeem, AMOUNT_COLLATERAL);
+        dsce.redeemCollateral(weth, AMOUNT_COLLATERAL);
+        uint256 userBalanceAfterRedeem = dsce.getCollateralBalanceOfUser(USER, weth);
+        assertEq(userBalanceAfterRedeem, 0);
+        vm.stopPrank();
+    }
+
+    function testRevertsIfRedeemCollateralBreaksHealthFactor() public depositedCollateral {
+        vm.startPrank(USER);
+        uint256 AMOUNT_COLLATERAL_IN_USD = dsce.getUsdValue(weth, AMOUNT_COLLATERAL);
+        uint256 amountToMint = AMOUNT_COLLATERAL_IN_USD / 2;
+
+        dsce.mintDsc(amountToMint);
+
+        uint256 expectedHealthFactor = 0;
+        vm.expectRevert(abi.encodeWithSelector(DSCEngine.DSCEngine__BreaksHealthFactor.selector, expectedHealthFactor));
+        dsce.redeemCollateral(weth, AMOUNT_COLLATERAL);
+        vm.stopPrank();
+    }
+
+    ////////////////////////////
+    // Burn DSC tests///////////
+    ////////////////////////////
+    function testRevertsIfBurnAmountIsZero() public {
+        vm.startPrank(USER);
+        vm.expectRevert(DSCEngine.DSCEngine__AmountMustBeGreaterThanZero.selector);
+        dsce.burnDsc(0);
+        vm.stopPrank();
+    }
+
+    function testRevertsIfBurnAmountIsMoreThanUserHas() public depositedCollateral {
+        vm.startPrank(USER);
+        vm.expectRevert();
+        dsce.burnDsc(1);
+        vm.stopPrank();
+    }
+
+    function testCanBurnDscAfterMinting() public depositedCollateralAndMintedDsc {
+        vm.startPrank(USER);
+        ERC20Mock(address(dsc)).approve(address(dsce), AMOUNT_DSC_TO_MINT);
+        dsce.burnDsc(AMOUNT_DSC_TO_MINT);
+        vm.stopPrank();
+    }
+    
 }
