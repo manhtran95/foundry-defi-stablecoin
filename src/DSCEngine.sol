@@ -39,7 +39,7 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interf
  */
 contract DSCEngine is ReentrancyGuard {
     ////////////
-    // Errors
+    // Errors///
     ////////////
     error DSCEngine__AmountMustBeGreaterThanZero();
     error DSCEngine__TokenAddressesAndPriceFeedAddressesLengthsMustBeTheSame();
@@ -50,12 +50,6 @@ contract DSCEngine is ReentrancyGuard {
     error DSCEngine__NotEnoughCollateralToRedeem();
     error DSCEngine__HealthFactorOk();
     error DSCEngine__HealthFactorNotImproved();
-
-    /////////////
-    // Events
-    /////////////
-    event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
-    event CollateralRedeemed(address indexed from, address indexed to, address indexed token, uint256 amount);
 
     ////////////////////
     // State variables//
@@ -74,8 +68,14 @@ contract DSCEngine is ReentrancyGuard {
     DecentralizedStableCoin private immutable I_DSC;
 
     /////////////
-    // Modifiers
+    // Events////
     /////////////
+    event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
+    event CollateralRedeemed(address indexed from, address indexed to, address indexed token, uint256 amount);
+
+    ////////////////
+    // Modifiers////
+    ////////////////
     modifier moreThanZero(uint256 amount) {
         _moreThanZero(amount);
         _;
@@ -268,13 +268,6 @@ contract DSCEngine is ReentrancyGuard {
         if (!success) revert DSCEngine__TransferFailed();
     }
 
-    function getTokenAmountFromUsd(address token, uint256 usdAmountInWei) public view returns (uint256) {
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(sPriceFeeds[token]);
-        (, int256 price,,,) = priceFeed.latestRoundData();
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return (usdAmountInWei * PRECISION) / (uint256(price) * ADDITIONAL_FEED_PRECISION);
-    }
-
     function _getAccountInformation(address user)
         private
         view
@@ -300,9 +293,8 @@ contract DSCEngine is ReentrancyGuard {
     }
 
     //////////////////////////////////
-    // Public & External Functions///
+    // Public & External Functions////
     //////////////////////////////////
-
     function getAccountCollateralValue(address user) public view returns (uint256 totalCollateralValueInUsd) {
         for (uint256 i = 0; i < sCollateralTokens.length; i++) {
             address token = sCollateralTokens[i];
@@ -317,5 +309,16 @@ contract DSCEngine is ReentrancyGuard {
         (, int256 price,,,) = priceFeed.latestRoundData();
         // forge-lint: disable-next-line(unsafe-typecast)
         return (uint256(price) * ADDITIONAL_FEED_PRECISION * amount) / PRECISION;
+    }
+
+    function getTokenAmountFromUsd(address token, uint256 usdAmountInWei) public view returns (uint256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(sPriceFeeds[token]);
+        (, int256 price,,,) = priceFeed.latestRoundData();
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return (usdAmountInWei * PRECISION) / (uint256(price) * ADDITIONAL_FEED_PRECISION);
+    }
+
+    function getAccountInformation(address user) external view returns (uint256 totalDscMinted, uint256 collateralValueInUsd) {
+        (totalDscMinted, collateralValueInUsd) = _getAccountInformation(user);
     }
 }
