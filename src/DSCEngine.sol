@@ -27,6 +27,7 @@ import {DecentralizedStableCoin} from "./DecentralizedStableCoin.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+// import {console} from "forge-std/console.sol";
 
 /**
  * @title DSCEngine
@@ -240,7 +241,7 @@ contract DSCEngine is ReentrancyGuard {
         _burnDsc(debtToCover, user, msg.sender);
 
         uint256 endingUserHealthFactor = _healthFactor(user);
-        if (endingUserHealthFactor < MIN_HEALTH_FACTOR) {
+        if (endingUserHealthFactor <= startingUserHealthFactor) {
             revert DSCEngine__HealthFactorNotImproved();
         }
         _revertIfHealthFactorIsBroken(msg.sender);
@@ -265,12 +266,19 @@ contract DSCEngine is ReentrancyGuard {
         I_DSC.burn(amountDscToBurn);
     }
 
+    /**
+     *
+     * @param from The address of the user that collateral balance is lowered
+     * @param to The address of the user that receive the token collateral
+     * @param tokenCollateralAddress The address of the token collateral
+     * @param amountCollateral The amount of collateral to redeem
+     * @dev calling function must check for health factor being broken
+     */
     function _redeemCollateral(address from, address to, address tokenCollateralAddress, uint256 amountCollateral)
         private
     {
         sCollateralDeposited[from][tokenCollateralAddress] -= amountCollateral;
         emit CollateralRedeemed(from, to, tokenCollateralAddress, amountCollateral);
-        _revertIfHealthFactorIsBroken(from);
 
         bool success = IERC20(tokenCollateralAddress).transfer(to, amountCollateral);
         if (!success) revert DSCEngine__TransferFailed();
@@ -304,6 +312,10 @@ contract DSCEngine is ReentrancyGuard {
     //////////////////////////////////
     // Public & External Functions////
     //////////////////////////////////
+    function getHealthFactor(address user) external view returns (uint256) {
+        return _healthFactor(user);
+    }
+
     function getAccountCollateralValue(address user) public view returns (uint256 totalCollateralValueInUsd) {
         for (uint256 i = 0; i < sCollateralTokens.length; i++) {
             address token = sCollateralTokens[i];
@@ -313,7 +325,7 @@ contract DSCEngine is ReentrancyGuard {
         return totalCollateralValueInUsd;
     }
 
-    function getCollateralBalanceOfUser(address user, address token) external view returns (uint256) {
+    function getCollateralBalanceOfUser(address user, address token) public view returns (uint256) {
         return sCollateralDeposited[user][token];
     }
 
@@ -339,7 +351,4 @@ contract DSCEngine is ReentrancyGuard {
         (totalDscMinted, collateralValueInUsd) = _getAccountInformation(user);
     }
 
-    function getDscBalanceOfUser(address user) external view returns (uint256) {
-        return sDscMinted[user];
-    }
 }
